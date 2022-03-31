@@ -185,7 +185,7 @@ const Home = {
     <div class="sk-plane" v-if="loadingFileList || uploading"></div>
     
     <ul class="file-list">
-      <transition-group name="slide">
+      <transition-group name="unfold">
         <file-item
           v-for="item in fileList" 
           :key="item.md5"
@@ -671,6 +671,7 @@ app.component("file-item", {
           <span v-else>{{str.more}}</span>
         </button>
         
+        <transition name="fade">
         <div v-show="showDetail" class="file-item-detail">
           <canvas ref="qrCode">...</canvas>
           <div v-if="isImg">
@@ -681,6 +682,8 @@ app.component("file-item", {
             <button @click="downloadFile" class="light-button">{{str.download}}</button>
           </div>
         </div>
+        </transition>
+
         </div>
     </li>
     `
