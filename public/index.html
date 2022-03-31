@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Easy share</title>
+  <style>
+    .show-border {
+      border: 0.1em solid #888;
+    }
+
+    :root {
+      --sk-size: 2em;
+      --sk-color: rgb(233, 232, 232);
+    }
+
+    .sk-plane {
+      margin: 1em 0em 0.2em 0em;
+      width: var(--sk-size);
+      height: var(--sk-size);
+      background-color: var(--sk-color);
+      animation: sk-plane 1.2s infinite ease-in-out; 
+    }
+
+    @keyframes sk-plane {
+      0% {
+        transform: perspective(120px) rotateX(0deg) rotateY(0deg); 
+      } 50% {
+        transform: perspective(120px) rotateX(-180.1deg) rotateY(0deg); 
+      } 100% {
+        transform: perspective(120px) rotateX(-180deg) rotateY(-179.9deg); 
+      } 
+    }
+
+    #loading-page {
+      display: flex;
+      justify-content: center;
+      margin: 4em;
+    }
+  </style>
+  <script src="https://unpkg.com/vue@3.2.31/dist/vue.global.js"></script>
+  <!-- <script src="js/vue@3.2.31.js"></script> -->
+  <script src="js/vue-router@4.js"></script>
+  <script src="js/spark-md5.min.js"></script>
+  <script src="js/qrcode.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="favicon.ico">
+</head>
+
+<body>
+  <div id="app" class="card">
+
+    <div class="card-title">
+      <div></div>
+      <h2>{{str.title}}</h2>
+      <select v-model="lang" class="light-button">
+        <option
+          v-for="ln in langOptions"
+          :value="ln"
+        >{{strings[ln].option}}</option>
+      </select>
+    </div>
+    
+    <router-view :reqargs="reqArgs" :str="str"></router-view>
+
+    <div id="loading-page">
+      <div class="sk-plane"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
