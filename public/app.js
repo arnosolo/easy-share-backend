@@ -31,7 +31,10 @@ const strings = {
     file_upload_success: "File upload success",
     upload_progress: "Upload progress",
     server_is_merging_chunks: "Server is merging chunks...",
-    comfirm_delete: "Are you sure you want delete this file?"
+    comfirm_delete: "Are you sure you want delete this file?",
+    abortUpload: "Abort upload",
+    slicing: "Slicing file into chunks...",
+    slicingFailed: "Slicing failed",
   },
   zh: {
     option: "简体中文",
@@ -65,6 +68,9 @@ const strings = {
     upload_progress: "上传进度",
     server_is_merging_chunks: "服务器正在合并切片...",
     comfirm_delete: "确定要删除这个文件吗?",
+    abortUpload: "放弃上传",
+    slicing: "正在将文件切块...",
+    slicingFailed: "文件切块失败",
   }
 }
 
@@ -130,9 +136,17 @@ const Home = {
       chunkSize: 10 * 1024 * 1024, // 10MB
       loadingFileList: false,
       fileListLoadFail: false,
+      slicing: false,
+      slicingFailed: false,
+      slicingProgress: 0,
+      hashing: false,
+      hashFailed: false,
+      hashProgress: 0,
       uploading: false,
       uploadFail: false,
-      reqArgs: this.reqargs
+      uploadProgress: 0,
+      reqArgs: this.reqargs,
+      abortControllers:[],
     }
   },
   props: ['reqargs', 'str'],
@@ -151,7 +165,17 @@ const Home = {
     </div>
 
     <div class="status-info">
-      <div v-if="!uploadFail" >{{uploadStatus}}</div>
+      <div v-if="slicing">
+        <span>{{str.slicing}}</span>
+      </div>
+      <div v-if="slicingFailed">
+        <span>{{str.slicingFailed}}</span>
+        <button @click="uploadFile" class="light-button">{{str.uploadAgain}}</button>
+      </div>
+      <div v-if="uploading" class="status-info-item">
+        <div>{{uploadStatus}}</div> <br/>
+        <button @click="abortUpload" class="light-button">{{str.abortUpload}}</button>
+      </div>
       <div v-if="uploadFail">
         <span>{{str.uploadFailed}}</span>
         <button @click="uploadFile" class="light-button">{{str.uploadAgain}}</button>
@@ -161,15 +185,17 @@ const Home = {
     <div class="sk-plane" v-if="loadingFileList || uploading"></div>
     
     <ul class="file-list">
-      <file-item
-        v-for="item in fileList" 
-        v-bind:file="item"
-        v-bind:key="item.md5"
-        v-on:delete-item="deleteFileItem"
-        :reqargs="reqArgs"
-        class="file-item"
-        :str="str"
-      ></file-item>
+      <transition-group name="slide">
+        <file-item
+          v-for="item in fileList" 
+          :key="item.md5"
+          :file="item"
+          :reqargs="reqArgs"
+          :str="str"
+          v-on:delete-item="deleteFileItem"
+          class="file-item"
+        ></file-item>
+      </transition-group>
     </ul>
 
   </div>
@@ -240,8 +266,10 @@ const Home = {
       return chunks
     },
     async uploadFile(evt) {
-      this.uploading = true
+      this.slicing = true
+      this.slicingFailed = false
       this.uploadFail = false
+
       const file = this.$refs.filepicker.files[0]
       this.selectedFile = file.name
       this.uploadStatus = `${file.name} ${this.str.was_selected}`
@@ -250,9 +278,6 @@ const Home = {
       // 1.文件切片
       let chunks = this.sliceFile(file, this.chunkSize).sort((a, b) => a.id - b.id)
 
-      // 计算哈希2:使用递归计算会计算不像上面的chunks.map()方法一样一下子就得出值
-      // 而且和powershell计算出来一致, 这种应该是正确的方法
-      // Get-FileHash -Algorithm MD5 .\理查德费曼专访-想象的乐趣.mp4
       const getMD5 = (chunks) => new Promise((resolve, reject) => {
         const spark = new SparkMD5.ArrayBuffer()
         let count = 0
@@ -275,7 +300,16 @@ const Home = {
         };
         loadNext(0);
       })
-      const md5 = await getMD5(chunks)
+
+      let md5 = ""
+      try {
+        md5 = await getMD5(chunks)
+        this.slicing = false
+      } catch (error) {
+        this.slicing = false
+        this.slicingFailed = true
+        console.error(error)
+      }
       const fileExtension = file.name.split('.').slice(-1)[0]
       const md5WithExten = md5 + '.' + fileExtension
 
@@ -286,20 +320,10 @@ const Home = {
       }))
       console.log(chunks);
 
-      const showUrlAndQRcode = () => {
-        const url = `${urlBase}/api/v1/file/${md5WithExten}`
-        // const qrCodeE = document.getElementById('qr-code')
-        // qrCodeE.onclick = () => {
-        //   navigator.clipboard.writeText(url).then(() => { alert(`已复制${md5WithExten}的链接到剪切板`) }).catch(err => { throw err })
-        // }
-        // QRCode.toCanvas(qrCodeE, url, function (error) {
-        //   if (error) console.error(error)
-        //   console.log('二维码已生成!');
-        // })
-
-      }
       // 3.先确认合并文件服务器上是不是 已存在且还是完整的
       try {
+        this.uploading = true
+
         const msg = `正在询问服务器${md5WithExten} 是否 已存在且还是完整的`
         console.log(msg);
         // this.uploadStatus = msg
@@ -334,7 +358,6 @@ const Home = {
           console.log(`合并文件${md5WithExten}不存在或不完整的,开始上传`);
           this.uploadStatus = `${this.str.uploading} ${file.name}`
           let successCount = 0
-          const abortControllers = []
           const uploadStatePromises = chunks.map(async (chunk) => {
             try {
               console.log(`正在上传 ${chunk.id}`);
@@ -346,7 +369,7 @@ const Home = {
               form.append('md5WithExten', md5WithExten);
               // form.append('code', SparkMD5.hash(this.reqArgs.password));
               const controller = new AbortController(); // 用于手动终止fetch请求
-              abortControllers.push(controller)
+              this.abortControllers.push(controller)
               const { signal } = controller; // 用于手动终止fetch请求
               const url = `${this.reqArgs.urlBase}/api/v1/file/upload`
               const res = await fetch(url, {
@@ -359,7 +382,6 @@ const Home = {
                 signal,
               })
               const resJson = await res.json()
-              // abortControllers.forEach(c => c.abort()) // 终止所有fetch请求
               if (resJson.success) {
                 successCount++
                 const msg = `${this.str.upload_progress}: ${Number(successCount / chunks.length * 100).toFixed(0)}%`
@@ -373,6 +395,7 @@ const Home = {
               }
             } catch (error) {
               this.uploadFail = true
+              this.uploading = false
               this.uploadStatus = this.str.uploadFailed
               console.error(error);
             }
@@ -406,17 +429,16 @@ const Home = {
                 mode: 'cors',
               })
               const resJson = await res.json()
+              this.uploading = false
               if (resJson.success) {
                 console.log(`服务器: ${resJson.msg}`);
                 this.uploadStatus = this.str.uploadSuccess
                 this.fileList.unshift({md5,filename: file.name,md5WithExten})
-                this.uploading = false
               } else {
                 const msg = `服务器: ${resJson.msg}`
                 console.error(msg);
                 this.uploadStatus = this.str.uploadFailed
                 this.uploadFail = true
-                this.uploading = false
               }
             } catch (error) {
               this.uploadStatus = this.str.uploadFailed
@@ -432,6 +454,10 @@ const Home = {
         this.uploading = false
       }
     },
+    abortUpload() {
+      this.abortControllers.forEach(c => c.abort()) // 终止所有fetch请求
+    },
+
   }
 }
 
@@ -538,9 +564,15 @@ app.component("file-item", {
       fileExten: "",
       isImg: false,
       imgLoaded: false,
+      unmountSoon: false,
+      ready: false,
     }
   },
   mounted() {
+    this.ready = true
+  },
+  beforeUnmount() {
+    this.unmountSoon = true
   },
   props: ['reqargs', 'file', 'str'],
   emits: ['delete-item'],
@@ -620,35 +652,38 @@ app.component("file-item", {
     },
   },
   template:
-    `<li>
-      <div>{{file.filename}}</div>
-      <div>
-      <button v-on:click="confirmDel" :class="{ inactive: deleting }" class="light-button">
-        <span v-if="deleting">{{str.deleting}}</span>
-        <span v-else-if="deleteFail">{{str.deleteAgain}}</span>
-        <span v-else>{{str.delete}}</span>
-      </button>
-      <button @click="copyLink" class="light-button">
-        <span v-if="linkCopied">{{str.copied}}</span>
-        <span v-else-if="linkCopyFailed">{{str.copyFailed}}</span>
-        <span v-else>{{str.copyLink}}</span>
-      </button>
-      <button v-on:click="toggleDetailShow" class="light-button">
-        <span v-if="showDetail">{{str.less}}</span>
-        <span v-else>{{str.more}}</span>
-      </button>
-      <div v-show="showDetail" class="file-item-detail">
-        <canvas ref="qrCode">...</canvas>
-        <div v-if="isImg">
-          <img v-show="imgLoaded" :src="url" @load="handleImgLoaded" alt="..." loding="lazy" class="file-item-detail-img">
-          <div v-if="!imgLoaded" class="sk-plane"></div>
-        </div>
+    `
+      <li>
+        <div>{{file.filename}}</div>
         <div>
-          <button @click="downloadFile" class="light-button">{{str.download}}</button>
+        <button v-on:click="confirmDel" :class="{ inactive: deleting }" class="light-button">
+          <span v-if="deleting">{{str.deleting}}</span>
+          <span v-else-if="deleteFail">{{str.deleteAgain}}</span>
+          <span v-else>{{str.delete}}</span>
+        </button>
+        <button @click="copyLink" class="light-button">
+          <span v-if="linkCopied">{{str.copied}}</span>
+          <span v-else-if="linkCopyFailed">{{str.copyFailed}}</span>
+          <span v-else>{{str.copyLink}}</span>
+        </button>
+        <button v-on:click="toggleDetailShow" class="light-button">
+          <span v-if="showDetail">{{str.less}}</span>
+          <span v-else>{{str.more}}</span>
+        </button>
+        
+        <div v-show="showDetail" class="file-item-detail">
+          <canvas ref="qrCode">...</canvas>
+          <div v-if="isImg">
+            <img v-show="imgLoaded" :src="url" @load="handleImgLoaded" alt="..." loding="lazy" class="file-item-detail-img">
+            <div v-if="!imgLoaded" class="sk-plane"></div>
+          </div>
+          <div>
+            <button @click="downloadFile" class="light-button">{{str.download}}</button>
+          </div>
         </div>
-      </div>
-      </div>
-    </li>`
+        </div>
+    </li>
+    `
 })
 
 const NotFound = {

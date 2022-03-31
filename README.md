@@ -1,6 +1,24 @@
 ### Share file with ease
 
-
+#### Config
+0. Front
+```js
+    const app = Vue.createApp({
+        data() {
+            return {
+            reqArgs: {
+                // Set the right url
+                // urlBase: "http://localhost:3000",
+                urlBase: "https://arno.fun",
+                password: "",
+                username: "",
+            },
+```
+0. Back
+```ts
+    // src/config.ts
+    // Set the right url
+```
 
 #### API List
 
