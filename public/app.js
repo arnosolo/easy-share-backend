@@ -86,6 +86,7 @@ const app = Vue.createApp({
       strings: strings,
       langOptions: [],
       lang: "en",
+      loaded: false,
     }
   },
   mounted() {
@@ -98,7 +99,7 @@ const app = Vue.createApp({
     }
     
     this.checkAuth()
-    document.getElementById("app").removeChild(document.getElementById("loading-page"))
+    this.loaded = true
   },
   computed: {
     str() {
@@ -153,7 +154,7 @@ const Home = {
   template: `
   <div class="info">
 
-    <div>
+    <div class="file-picker">
       <label for="file-picker">{{str.selectFile}}</label>
       <button @click="selectFile" class="light-button">{{str.chooseFile}}</button>
       <input ref="filepicker" type="file" @change="uploadFile" class="hide">
@@ -185,22 +186,21 @@ const Home = {
     <div class="sk-plane" v-if="loadingFileList || uploading"></div>
     
     <ul class="file-list">
-      <transition-group name="unfold">
-        <file-item
-          v-for="item in fileList" 
-          :key="item.md5"
-          :file="item"
-          :reqargs="reqArgs"
-          :str="str"
-          v-on:delete-item="deleteFileItem"
-          class="file-item"
-        ></file-item>
-      </transition-group>
+      <file-item
+        v-for="item in fileList" 
+        :key="item.md5"
+        :file="item"
+        :reqargs="reqArgs"
+        :str="str"
+        v-on:delete-item="deleteFileItem"
+        class="file-item"
+      ></file-item>
     </ul>
 
   </div>
   `,
   mounted() {
+    this.listAllFile()
   },
   methods: {
     selectFile() {
@@ -671,7 +671,6 @@ app.component("file-item", {
           <span v-else>{{str.more}}</span>
         </button>
         
-        <transition name="fade">
         <div v-show="showDetail" class="file-item-detail">
           <canvas ref="qrCode">...</canvas>
           <div v-if="isImg">
@@ -682,7 +681,6 @@ app.component("file-item", {
             <button @click="downloadFile" class="light-button">{{str.download}}</button>
           </div>
         </div>
-        </transition>
 
         </div>
     </li>

@@ -51,23 +51,24 @@
 </head>
 
 <body>
-  <div id="app" class="card">
-
-    <div class="card-title">
-      <div></div>
-      <h2>{{str.title}}</h2>
-      <select v-model="lang" class="light-button">
-        <option
-          v-for="ln in langOptions"
-          :value="ln"
-        >{{strings[ln].option}}</option>
-      </select>
-    </div>
-    
-    <router-view :reqargs="reqArgs" :str="str"></router-view>
-
-    <div id="loading-page">
-      <div class="sk-plane"></div>
+  <div id="app">
+    <div class="card">
+      <div class="card-title">
+        <div></div>
+        <h2>{{str.title}}</h2>
+        <select v-model="lang" class="light-button">
+          <option
+            v-for="ln in langOptions"
+            :value="ln"
+          >{{strings[ln].option}}</option>
+        </select>
+      </div>
+      
+      <router-view :reqargs="reqArgs" :str="str"></router-view>
+  
+      <div id="loading-page" v-if="!loaded">
+        <div class="sk-plane"></div>
+      </div>
     </div>
   </div>
 
