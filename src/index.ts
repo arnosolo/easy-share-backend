@@ -10,7 +10,7 @@ import path from 'path'
 import { auth } from './middlewares/auth'
 
 const app = express()
-const port = 3000
+const port = 13000
 
 // 1.Connect DB
 // const mongoUrl = `mongodb://${MONGO_USER}:${MONGO_PASSWORD}@${MONGO_IP}:${MONGO_PORT}/?authSource=admin`
