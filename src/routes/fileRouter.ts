@@ -1,6 +1,6 @@
 import express from "express"
 import { auth } from "../middlewares/auth";
-import { checkExist, saveChunk, getFileList, mergeChunks, getFile, deleteFile } from "../controllers/fileController";
+import { checkExist, saveChunk, getFileList, mergeChunks, getFile, deleteFile, renameFile } from "../controllers/fileController";
 
 const fileRouter = express.Router();
 fileRouter.route("/:md5WithExten")
@@ -18,5 +18,8 @@ fileRouter.route("/list-all")
 
 fileRouter.route("/exist")
   .post(auth, checkExist)
+
+fileRouter.route("/rename")
+  .post(auth, renameFile)
 
 export { fileRouter }

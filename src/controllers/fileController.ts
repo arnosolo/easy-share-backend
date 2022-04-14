@@ -18,30 +18,6 @@ class FileInfo {
     this.createTime = Date.now()
     this.lastModified = Date.now()
   }
-
-  // get md5(): string {
-  //   return this.md5;
-  // }
-  // set md5(value) {
-  //   this.md5 = value
-  //   this.lastModified = Date.now()
-  // }
-
-  // get filename(): string {
-  //   return this.filename;
-  // }
-  // set filename(value) {
-  //   this.filename = value
-  //   this.lastModified = Date.now()
-  // }
-
-  // get md5WithExten(): string {
-  //   return this.md5WithExten;
-  // }
-  // set md5WithExten(value) {
-  //   this.md5WithExten = value
-  //   this.lastModified = Date.now()
-  // }
 }
 
 const saveChunk: express.RequestHandler = (req, res, next) => {
@@ -72,6 +48,20 @@ const saveChunk: express.RequestHandler = (req, res, next) => {
       console.error(err);
       res.json({ success: false, msg })
     })
+}
+
+const renameFile: express.RequestHandler = async (req, res, next) => {
+  const { newName, md5 } = req.fields!
+  try {
+    const fileInfoList:Array<FileInfo> = JSON.parse(await fsp.readFile(FILE_LIST_PATH, { encoding: 'utf-8' }))
+    let info = fileInfoList.find(info => info.md5 == md5)
+    if(info) info.filename = `${newName}`
+    await fsp.writeFile(FILE_LIST_PATH, JSON.stringify(fileInfoList), { encoding: 'utf-8' })
+    res.json({ success: true })
+  } catch (error) {
+    res.json({ success: false})
+    throw error
+  }
 }
 
 const mergeChunks: express.RequestHandler = async (req, res, next) => {
@@ -261,4 +251,4 @@ const getFileList: express.RequestHandler = async (req, res, next) => {
   }
 }
 
-export { checkExist, saveChunk, mergeChunks, deleteFile, getFile, getFileList }
+export { checkExist, saveChunk, mergeChunks, deleteFile, getFile, getFileList, renameFile }
