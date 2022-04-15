@@ -3,20 +3,32 @@ import path from 'path'
 import fs from 'fs'
 import fsp from 'fs/promises'
 import SparkMD5 from 'spark-md5'
-import { CHUNK_DIR, FILE_LIST_PATH, MERGED_FILE_DIR } from '../config'
+import imageThumbnail from 'image-thumbnail'
+import crypto from 'crypto'
+import { CHUNK_DIR, FILE_LIST_PATH, MERGED_FILE_DIR, need_thumbnail_threshold } from '../config'
 
 class FileInfo {
   md5: string
   filename: string
   md5WithExten: string
+  exten: string
   createTime: number
   lastModified: number
-  constructor(md5="", filename="", md5WithExten="") {
+  type: string
+  size: number
+  hasThumbnail: boolean
+  thumbnail: string
+  constructor({md5="", filename="", md5WithExten="", type="", size=0, lastModified=0, createTime=Date.now(), hasThumbnail=false, thumbnail=""}) {
     this.md5 = md5
     this.filename = filename
     this.md5WithExten = md5WithExten
-    this.createTime = Date.now()
-    this.lastModified = Date.now()
+    this.size = size
+    this.type = type
+    this.exten = md5WithExten.split('.').pop() ?? "unknow"
+    this.createTime = createTime
+    this.lastModified = lastModified
+    this.hasThumbnail = hasThumbnail
+    this.thumbnail = thumbnail
   }
 }
 
@@ -65,7 +77,16 @@ const renameFile: express.RequestHandler = async (req, res, next) => {
 }
 
 const mergeChunks: express.RequestHandler = async (req, res, next) => {
-  const { filename, md5, md5WithExten } = req.fields!
+  const { filename, md5, md5WithExten, size, type, lastModified } = req.fields!
+  const fileInfo = new FileInfo({
+    filename: `${filename}`,
+    md5: `${md5}`,
+    md5WithExten: `${md5WithExten}`,
+    size: Number(size),
+    type: `${type}`,
+    lastModified: Number(lastModified),
+  })
+  
   const chunkSize: number = parseInt(`${req.fields!.chunkSize}`)
 
   // 1.获取切片列表
@@ -134,17 +155,40 @@ const mergeChunks: express.RequestHandler = async (req, res, next) => {
         console.log(msg)
         res.json({ success: false, msg })
       } else {
+        // 对大尺寸图片生成缩略图
+        if(fileInfo.type == "image/jpeg" || fileInfo.type == "image/png") {
+          if(buf.length > need_thumbnail_threshold) {
+            try {
+              let percentage = 90
+              let thumbnail = await imageThumbnail(buf, { responseType: 'buffer', percentage });
+              while(thumbnail.length > need_thumbnail_threshold) {
+                percentage *= 0.5
+                thumbnail = await imageThumbnail(buf, { responseType: 'buffer', percentage });
+              }
+              const hash = crypto.createHash('md5')
+              hash.update(thumbnail)
+              const thumbnailMd5 = hash.digest('hex')
+              await fsp.writeFile(path.join(MERGED_FILE_DIR, `${thumbnailMd5}.${fileInfo.exten}`), thumbnail)
+              fileInfo.hasThumbnail = true
+              fileInfo.thumbnail = `${thumbnailMd5}.${fileInfo.exten}`
+            } catch (error) {
+              console.error(error)
+            }
+          }
+        }
+
         // 2.9记录文件原名-保存用名(md5WithExten)映射关系
         console.log(`合成的文件md5与原文件一致,正在创建映射关系 ${md5WithExten} -- ${filename}`);
         
         if (!fs.existsSync(FILE_LIST_PATH)) { await fsp.writeFile(FILE_LIST_PATH, '[]', { encoding: 'utf-8' }) }
         const fileInfos: Array<FileInfo> = JSON.parse(await fsp.readFile(FILE_LIST_PATH, { encoding: 'utf-8' }))
-        fileInfos.push(new FileInfo(md5, `${filename}`, `${md5WithExten}`))
+        fileInfos.push(fileInfo)
         await fsp.writeFile(FILE_LIST_PATH, JSON.stringify(fileInfos), { encoding: 'utf-8' })
 
         await fsp.rmdir(chunksDir)
 
         const msg = `切片合并成功 ${md5WithExten}`
+
         console.log(msg);
         res.json({ success: true, msg })
       }
@@ -193,7 +237,7 @@ const getFile: express.RequestHandler = (req, res, next) => {
 }
 
 const checkExist: express.RequestHandler = async (req, res, next) => {
-  const { md5WithExten, md5, filename } = req.fields!
+  const { md5WithExten, md5, filename, size, type, lastModified } = req.fields!
   const filePath = path.join(MERGED_FILE_DIR, `${md5WithExten}`)
   // 1.检查合并文件是否存在
   console.log(`开始检查${md5WithExten}是否已存在且完整`);
@@ -219,7 +263,14 @@ const checkExist: express.RequestHandler = async (req, res, next) => {
           info.filename = `${filename}`
           info.lastModified = Date.now()
         } else {
-          const newInfo = new FileInfo(md5, `${filename}`, `${md5WithExten}`)
+          const newInfo = new FileInfo({
+            filename: `${filename}`,
+            md5: `${md5}`,
+            md5WithExten: `${md5WithExten}`,
+            size: Number(size),
+            type: `${type}`,
+            lastModified: Number(lastModified),
+          })
           console.log(newInfo)
           fileInfos.push(newInfo)
         }

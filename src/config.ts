@@ -8,7 +8,9 @@ const CHUNK_DIR = path.join(os.homedir(), 'upload_chunks')
 const MERGED_FILE_DIR = path.join(os.homedir(), 'merged_files')
 const FILE_LIST_PATH = path.join(os.homedir(), 'merged_files', `file_list.json`)
 
+const need_thumbnail_threshold = 1024 * 400 // 400KB
+
 const DB_URL = "mongodb://localhost:27017/jwt"
 const SECRET = "YJBaYsNv2HWQuJBaYsNv2HWQuuQ9qYlauQ9qYlaY"
 
-export { DB_URL, SECRET, PORT, URL_BASE, MY_AUTH_HASH, CHUNK_DIR, MERGED_FILE_DIR, FILE_LIST_PATH }
+export { DB_URL, SECRET, PORT, URL_BASE, MY_AUTH_HASH, CHUNK_DIR, MERGED_FILE_DIR, FILE_LIST_PATH, need_thumbnail_threshold }
